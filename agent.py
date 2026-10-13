@@ -11,7 +11,8 @@ import re
 
 import config
 import trace
-from tools import search_listings, suggest_outfit, create_fit_card
+from tools import suggest_outfit, create_fit_card
+from mcp_client import call_tool, MCPError
 from generate import ModelUnavailable
 
 
@@ -120,17 +121,17 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         session["parsed"] = _parse_query(query)
         trace.step("parse_query", inputs=query, returned=session["parsed"])
 
-        # Step 2 — search_listings.
+        # Step 2 — search_listings (now served over MCP, not an in-process call).
         iterations += 1
         trace.check_iterations(iterations)
         parsed = session["parsed"]
-        session["search_results"] = search_listings(
-            description=parsed["description"],
-            size=parsed["size"],
-            max_price=parsed["max_price"],
-        )
+        session["search_results"] = call_tool("search_listings", {
+            "description": parsed["description"],
+            "size": parsed["size"],
+            "max_price": parsed["max_price"],
+        })
         trace.step(
-            "search_listings",
+            "search_listings (via MCP)",
             inputs=parsed,
             returned=session["search_results"],
         )
@@ -194,6 +195,11 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         session["error"] = (
             f"The model couldn't be reached: {exc}. "
             "Check your GEMINI_API_KEY in .env, then try again."
+        )
+    except MCPError as exc:
+        session["error"] = (
+            f"The search tool couldn't be reached over MCP: {exc}. "
+            "Make sure mcp_server.py runs on its own, then try again."
         )
 
     return session

@@ -67,24 +67,37 @@ from tools import search_listings as _search_listings_impl  # noqa: F401 — you
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-# ── TODO: uncomment and fill this in ──────────────────────────────────────────
-#
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
-# ──────────────────────────────────────────────────────────────────────────────
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search a mock thrift-listings catalog for items matching a free-text
+    description, optionally filtered by exact size and a price ceiling.
+
+    Args:
+        description: free-text keywords from the user (e.g. "vintage graphic
+            tee"). Tokenised with a small stopword list and matched against each
+            listing's title, description, category, style_tags, colors and
+            brand; results are ranked by overlap count, best match first.
+        size: an exact size label as it would appear on a listing — a letter
+            size ("XS"–"XXL"), a waist size ("W28"), or a US shoe size ("US 9").
+            Matched as a token, not a substring, so "M" matches "S/M" and
+            "M (oversized)" but not "XL". Omit to skip the size filter.
+        max_price: price ceiling in whole or fractional US dollars (e.g. 30
+            for "$30 or less"). Listings strictly above this price are
+            excluded. Omit to skip the price filter.
+
+    Returns:
+        A list of listing dicts, best match first, each with the keys id,
+        title, description, category, style_tags, size, condition, price,
+        colors, brand, platform. Capped at the server's configured result
+        limit. Returns an empty list [] (never None, never an exception) when
+        no listing matches — callers should branch on that empty list.
+    """
+    return _search_listings_impl(description, size, max_price)
 #
 # Two notes on the block above.
 #
