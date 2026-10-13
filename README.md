@@ -239,6 +239,25 @@ Found my ultimate early 2000s daydream on depop for just $18.0! That dreamy butt
   something the next-unit grader can test for — "M matches S/M but not XL,
   US 9, or W30" is a check you can turn into a one-line assertion.
 
+**Moment 3 — arguing the opposite verdict on criterion 4 (unit 4)**
+
+- *What I asked for:* After seeing 5 of 25 criterion-4 tries fail with 503
+  UNAVAILABLE, I was about to score it as MISSED and move on. I pasted the
+  criterion, the target, the five tries, and my draft verdict into Claude
+  and asked it to argue the opposite verdict as strongly as it could.
+- *What came back:* The argument was that the across-items part of the
+  criterion — "5 openings, no shared sentence, each mentions price once" —
+  was the part I wrote the criterion to test, and it had passed cleanly on
+  Try 1 of each of the five items. The failing tries were a different
+  question entirely (how often the model is available), and if I let that
+  question swallow the one I actually meant to ask, I'd miss the real
+  diagnosis.
+- *What I changed:* I split the row-level 5/5 completion rate from the
+  across-items check in the Verdicts section and reported both numbers.
+  The diagnosis points at `generate.py:325-340`, which is where 503 is
+  being treated as terminal instead of retriable — a code bug the
+  mechanical scoring would have hidden.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -492,29 +511,29 @@ changes shape, the return value does not" is asking about.
 
 ## The Improvement
 
-<!-- What you changed, why your diagnosis pointed at it, and the after-run in
-     the same table format. One change, measured properly.
-
-     `python run_eval.py --label after` -->
-
 **What I changed:**
+Three lines in [generate.py:325-340](generate.py#L325-L340). The retry loop
+inside `generate()` previously only recognised 429 and "resource exhausted"
+and "rate limit" as retriable. I added an `overloaded` check that triggers
+on `"503"` or `"unavailable"` in the exception text, and routed that through
+the same backoff path as a rate-limit push-back. The log line now reads
+`[model overloaded]` instead of `[rate limit]` when the retry is for a 503
+specifically, so the real cause is visible in the eval log.
 
 **Which failure it was meant to fix:**
+The five criterion-4 misses in the Before run, all of them 503 UNAVAILABLE
+from Gemini on the `create_fit_card` call. The diagnosis named this as a
+transient server-side load issue that the service itself tells you to
+retry, and the code was treating it as terminal on the first attempt. The
+change is the minimum one that makes the retry loop match what the service
+is actually telling us.
 
 ### Run Log — After
 
-| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
-|---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+<!-- After-run table + output are filled in below from
+     results/run_*_after.md once run_eval.py --label after finishes. -->
 
 **Did it help, and how do I know:**
-
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
 
 
 
@@ -522,9 +541,8 @@ changes shape, the return value does not" is asking about.
 
 ## What's Still Broken
 
-<!-- For each criterion still missed: what you'd do, and why you stopped where
-     you did. "I ran out of time" is fine if it's true. Pretending nothing is
-     left is not. -->
+<!-- Filled in once the after-run shows what the improvement did and did not
+     move. Edited below from the after-eval results. -->
 
 
 

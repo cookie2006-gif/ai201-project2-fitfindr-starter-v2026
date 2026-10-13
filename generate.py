@@ -328,11 +328,17 @@ def generate(
                 or "resource" in message and "exhaust" in message
                 or "rate" in message and "limit" in message
             )
-            if not rate_limited:
+            # 503 UNAVAILABLE is the service shedding load ("high demand … try
+            # again later"). It is explicitly retriable, and dropping the run
+            # on the first attempt cost me five criterion-4 rows in the
+            # before-eval. Treat it the same as a rate limit.
+            overloaded = "503" in message or "unavailable" in message
+            if not rate_limited and not overloaded:
                 raise ModelUnavailable(_explain(exc)) from exc
             backoff = _retry_delay(exc, attempt)
+            reason = "service pushed back" if rate_limited else "model overloaded"
             print(
-                f"  [rate limit] service pushed back. Waiting {backoff:.0f}s "
+                f"  [{reason}] waiting {backoff:.0f}s "
                 f"(attempt {attempt + 1} of {config.MAX_RETRIES}). This is "
                 f"the limiter doing its job, not a bug.",
                 file=sys.stderr,
