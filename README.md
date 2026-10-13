@@ -318,23 +318,97 @@ that produced it:
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
-**Happy path**
+**Happy path** — `python app.py ask 'vintage graphic tee under $30' --trace`,
+produced by [agent.py::run_agent](agent.py#L99) with trace calls from
+[trace.py::step](trace.py#L41). The MCP call is step 2.
 
 ```
-
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      →    first result wins
+[4] suggest_outfit
+      in:  dict with keys: item
+      out: **Outfit 1:** Pair the Y2K Baby Tee with the baggy straight-leg jeans and chunky white sneakers for a classic,…
+[5] create_fit_card
+      in:  dict with keys: item
+      out: Obsessed with this little butterfly tee I just scored on depop for only $18.00! It’s giving major Y2K nostalgi…
 ```
 
-**Empty search**
+**Empty search** — `python app.py ask 'designer ballgown size XXS under $5' --trace`.
+Visibly shorter: step 3 is the branch, not `select_item`, and steps 4 and 5
+never run.
 
 ```
-
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[3] branch
+      →    search returned empty — stopping before suggest_outfit
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**Failure-mode messages, as the user sees them**
 
+The three handlers from this unit, triggered on purpose. Each message names
+what broke and what the user can try.
+
+- *Empty search* — handler in [agent.py:139-155](agent.py#L139-L155), set on
+  `session["error"]`:
+
+  ```
+  No listings matched 'designer ballgown size XXS under $5'. Try raising the
+  price above $5; loosening the size filter (you asked for XXS); using fewer
+  or different keywords.
+  ```
+
+- *Empty wardrobe* — `python app.py ask 'denim jacket under $50' --empty-wardrobe`.
+  Fallback in [tools.py:119-128](tools.py#L119-L128). The agent does **not**
+  stop; it returns general styling advice for the item on its own:
+
+  ```
+  Pair this cropped jacket with high-waisted black wide-leg trousers or a
+  floral midi skirt to balance the proportions. Layer it over a fitted white
+  ribbed tank top or a graphic baby tee. Finish the look with chunky leather
+  loafers or retro canvas sneakers.
+  ```
+
+- *Model unavailable* — one character of `GEMINI_API_KEY` flipped in `.env`,
+  then a novel query (`'checkered flannel shirt in size L'`) so the build
+  cache can't serve it. Handler in [agent.py:198-202](agent.py#L198-L202):
+
+  ```
+  The model couldn't be reached: The model rejected your API key. Check
+  GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com..
+  Check your GEMINI_API_KEY in .env, then try again.
+  ```
+
+  Key restored after the run.
+
+**On the MCP move:**
+
+The code change was small and local. `mcp_server.py` registers one tool —
+`search_listings` — with a description that promises an empty-list return on
+no match and names units on `max_price`. In `agent.py`, the direct
+`search_listings(...)` call in `run_agent` is now `call_tool("search_listings",
+{...})`, and an `MCPError` branch sits beside the existing `ModelUnavailable`
+one so a server crash produces the same shape of readable session error. The
+trace step is relabelled `search_listings (via MCP)` so the MCP hop is
+visible in step 2 of every run.
+
+Nothing behaved differently afterwards. I checked by calling
+`search_listings(...)` directly and `call_tool("search_listings", {...})` with
+the same arguments and comparing the lists: `direct == mcp`, same length, same
+dicts, same key order. The list of dicts round-trips through FastMCP's JSON
+unwrapping with no key or type changes, which is what the rubric's "the call
+changes shape, the return value does not" is asking about.
 
 
 ---
